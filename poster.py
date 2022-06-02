@@ -88,10 +88,4 @@ if __name__ == "__main__":
         runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
         runner.run(Poster)
 
-    while True:
-        try:
-            run()
-        except Exception as e:
-            print(e)
-            print("Retrying in 5 seconds...")
-            asyncio.sleep(5)
+    run()

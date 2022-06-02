@@ -1,173 +1,192 @@
+from ast import Str
 import asyncio
+from dis import dis
 import txaio
 
 txaio.use_asyncio()
 import os
 import pickle
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
-import default_gamestate
+import json
 
 
 class GameState(ApplicationSession):
     async def onJoin(self, details):
 
-        self.highscore = self.load_highscore()
-        if self.highscore == None:
-            self.highscore = 0
-        self.names = {}
-        self.alives = self.load_alives()
-        if self.alives == None:
-            self.alives = []
-        else:
-            for uid in self.alives:
-                player_data = pickle.loads(await self.call("data.player.read", uid))
-                if player_data:
-                    self.names[str(uid)] = player_data["display_name"]
+        self.coins = {}
+        self.alives = {}
+        self.game_tick = 0
+        self.to_save = ["alives", "coins"]
 
-        self.gamestate = self.load_gamestate()
-        if self.gamestate == None:
-            self.gamestate = default_gamestate.default
+        for store_name in self.to_save:
+            print(f"o-> Loading {store_name} from file")
+            try:
+                ret = self.load_from_file("db", store_name)
+                print(ret)
+                setattr(self, store_name, ret)
+            except Exception or json.decoder.JSONDecodeError as e:
+                if isinstance(e, json.decoder.JSONDecodeError):
+                    print(f"o-> The file {store_name} is empty")
+                else:
+                    print(f"o-> Probably the files don't exist yet")
 
-        default_env_commands = [
-            f"gamerule mobGriefing false" f"region flag -w world __global__ tnt deny",
-            f"whitelist on",
-            f"time set noon",
-            f"gamerule sendCommandFeedback false",
-            f'title @e[type=player] title "Restarting..."',
-            f'title @e[type=player] subtitle "Type anything to join the game"',
-            # f'bossbar add minecraft:peglin "default"',
-            # f'bossbar set minecraft:peglin name "High score: {0}"',
-            # f"bossbar set minecraft:peglin visible true",
-            # f"bossbar set minecraft:peglin players @a",
-            # f"bossbar set minecraft:peglin style progress",
-        ]
+        async def add_alive(player_info: tuple) -> dict:
+            channel_id = player_info[0]
+            mob_uid = player_info[1]
 
-        for cmd in default_env_commands:
-            await self.call("minecraft.post", cmd)
+            print(f"o-> Returning: Spawned {mob_uid}")
+            self.alives[mob_uid] = channel_id
 
-        self.to_save = ["alives", "gamestate", "names"]
+            if channel_id not in self.coins:
+                self.coins[channel_id] = 0
 
-        self.register(self.get_alives, "gamestate.alives.get")  # returns alives list
-        self.register(
-            self.add_alive, "gamestate.alives.add"
-        )  # adds an id in alives list
-        self.register(
-            self.remove_alive, "gamestate.alives.remove"
-        )  # adds an id in alives list
-        self.register(
-            self.remove_alive_all, "gamestate.alives.remove_all"
-        )  # adds an id in alives list
-        self.register(self.get_gamestate, "gamestate.get")  # returns gamestate dict
-        self.register(
-            self.get_gamestate_key, "gamestate.get.key"
-        )  # get value for gamestate[key]
-        self.register(
-            self.update_gamestate, "gamestate.update"
-        )  # replace gamestate dict
-        self.register(
-            self.update_gamestate_key, "gamestate.update.key"
-        )  # get value for gamestate[key]
+            await self.call("gamestate.alive.add", channel_id)
+            return self.alives
 
-        self.register(self.set_highscore, "gamestate.highscore.set")
-        self.register(self.get_highscore, "gamestate.highscore.get")
+        async def remove_alive(mob_uid: str) -> dict:
 
-        self.register(self.add_name, "gamestate.names.add")
-        self.register(self.get_names, "gamestate.names.all")
-        self.register(self.get_name, "gamestate.names.get")
-        self.register(self.remove_name, "gamestate.names.remove")
-        self.register(self.remove_all_names, "gamestate.names.remove_all")
-        self.register(self.remove_all, "gamestate.remove_all")
-        self.subscribe(self.add_alive, "spawn.player.new")
+            print(f"o-> Returning: Killing {mob_uid}")
 
-    def load_highscore(self):
-        return self.load_from_file("db", "highscore")
+            display_name = await get_display_name(mob_uid)
 
-    def set_highscore(self, value):
-        self.highscore = value
+            msg = f"{display_name} has died and received 10 coins ({self.coins[self.alives[mob_uid]]}"
+            self.call("minecraft.post", f'title funyrom actionbar "{msg}"')
 
-    def get_highscore(self):
-        return self.highscore
+            if mob_uid in self.alives:
+                self.alives.pop(mob_uid)
+                print(f"o-> Returning: Killed {mob_uid}")
+            else:
+                print(f"o-> Returning: {mob_uid} is not alive")
 
-    def remove_all(self):
-        self.remove_all_names()
-        self.names = {}
+            self.call("minecraft.post", f"kill @e[tag={mob_uid}]")
+            return self.alives
+
+        def get_alives() -> list:
+            return self.alives
+
+        def set_coin(channel_id: str, coin: int) -> int:
+            self.coins[channel_id] = coin
+            print(
+                f"o-> Returning: ({channel_id[:8]}) coin set to {self.coins[channel_id]}"
+            )
+            return self.coins[channel_id]
+
+        def get_coin(channel_id: str) -> bool:
+            return self.coins[channel_id]
+
+        def add_coin(channel_id: str, coin: int) -> int:
+
+            self.coins[channel_id] += coin
+            print(
+                f"o-> Returning: ({channel_id[:8]}) coin set to {self.coins[channel_id]}"
+            )
+            return self.coins[channel_id]
+
+        def remove_coin(channel_id: str, coin: int) -> int:
+            self.coins[channel_id] -= coin
+            print(
+                f"o-> Returning: ({channel_id[:8]}) coin set to {self.coins[channel_id]}"
+            )
+            return self.coins[channel_id]
+
+        async def check_alive():
+
+            to_kill = []
+            self.game_tick += 1
+
+            copy_of = self.alives.copy()
+            for id in copy_of:
+                cmd = f"execute if entity @e[tag={id},tag=mob]"
+                result = await self.call("minecraft.post", cmd)
+                if "Test failed" in result:
+                    await self.call("gamestate.death", self.alives[id])
+                    await remove_alive(id)
+
+            if self.game_tick % 5 == 0:
+                print(f"o-({len(copy_of)})-> Currently alives: {[x for x in copy_of]}")
+                display = []
+                for alive in copy_of:
+                    display.append({copy_of[alive][:8]: self.coins[copy_of[alive]]})
+                print(f"o-({len(display)})-> Currently coins: {display}")
+                print(f"o-> To remove from alives: {to_kill}")
+
+        async def get_display_name(mob_uid: str) -> str:
+            cmd = f"data get entity @e[tag={mob_uid},tag=name_holder,limit=1]"
+            ret = await self.call("minecraft.post", cmd)
+            display_name = ret.split("CustomName: '")[1].split("',")[0]
+            print(display_name)
+            if "extra" in display_name:
+                display_name = display_name.split("],")[1]
+            print(display_name)
+            display_name = dict(display_name)
+            return display_name
+
+        await self.register(get_display_name, "gamestate.get_display_name")
+        await self.subscribe(add_alive, "shop.spawn")  # (channel_id, mob_uid)
+        await self.register(remove_alive, "gamestate.alive.remove")  # (channel_id)
+        await self.register(get_alives, "gamestate.alive.get")  # ()
+
+        await self.register(set_coin, "gamestate.coin.set")  # (channel_id, int)
+        await self.register(get_coin, "gamestate.coin.get")  # (channel)
+        await self.register(add_coin, "gamestate.coin.add")  # (channel_id, int)
+        await self.register(remove_coin, "gamestate.coin.remove")  # (channel_id, int)
+
+        await self.subscribe(check_alive, "game.tick")  # ()
+
+        async def send_default_cmds(self):
+            default_cmds = [
+                f"gamerule mobGriefing false",
+                f"region flag -w world __global__ tnt deny",
+                f"whitelist on",
+                f"time set noon",
+                f"gamerule sendCommandFeedback false",
+                f'title @e[type=player] title "Restarting..."',
+                f'title @e[type=player] subtitle "Type anything to join the game"',
+                f"gamerule doDaylightCycle false",
+                f"gamerule doWeatherCycle false"
+                # f'bossbar add minecraft:peglin "default"',
+                # f'bossbar set minecraft:peglin name "High score: {0}"',
+                # f"bossbar set minecraft:peglin visible true",
+                # f"bossbar set minecraft:peglin players @a",
+                # f"bossbar set minecraft:peglin style progress",
+            ]
+
+            for cmd in default_cmds:
+                await self.call("minecraft.post", cmd)
+
+        await send_default_cmds(self)
+
+        await self.register(send_default_cmds, "gamestate.default.cmds")  # ()
 
     def ensure_file(self, dir, store_name):
-        filepath = f"{dir}/{store_name}"
+        filepath = f"{dir}/{store_name}.json"
         if not os.path.exists(f"{dir}"):
             os.mkdir(dir)
         if not os.path.exists(filepath):
             open(filepath, "w+").close()
 
-    def load_alives(self):
-        return self.load_from_file("db", "alives")
-
-    def load_gamestate(self):
-        return self.load_from_file("db", "gamestate")
+        print(f"o-> Ensuring {store_name} file exists")
 
     def load_from_file(self, dir, store_name):
+
         self.ensure_file(dir, store_name)
-        with open(f"{dir}/{store_name}", "rb") as f:
+        with open(f"{dir}/{store_name}.json", "r") as f:
             try:
-                data = pickle.load(f)
+                data = json.load(f)
             except EOFError:
                 print("Empty store")
                 data = None
+
+        print(f"o-> Loading {store_name} from file")
         return data
 
     def store_to_file(self, store_name):
+
         data = getattr(self, store_name)
-        with open(f"db/{store_name}", "wb") as f:
-            pickle.dump(data, f)
+        with open(f"db/{store_name}.json", "w", encoding="utf8") as f:
+            json.dump(data, f)
 
-    def get_alives(self):
-        return self.alives
-
-    def add_alive(self, data):
-
-        uid = data[0]
-        name = data[1]
-        print(f"o--> Adding {uid} {name} to alives and names")
-        self.alives.append(uid)
-        self.names[str(uid)] = name
-
-    def remove_alive(self, uid):
-        print(f"o--> Removing {uid} from alives")
-        self.alives.remove(uid)
-
-    def remove_alive_all(self):
-
-        self.alives = []
-
-    def get_names(self):
-        pickle.dumps(self.names)
-        return self.names
-
-    def get_name(self, uid):
-        return self.names[uid]
-
-    def add_name(self, uid, name):
-        self.names[str(uid)] = name
-
-    def remove_name(self, uid):
-        self.names.pop(str(uid), None)
-
-    def remove_all_names(self):
-        self.names = {}
-
-    def get_gamestate(self):
-        return self.gamestate
-
-    def get_gamestate_key(self, key):
-        return self.gamestate[key]
-
-    def update_gamestate(self, new_gamestate):
-        self.gamestate = new_gamestate
-        self.publish("gamestate.changed")
-
-    def update_gamestate_key(self, k, v):
-        self.gamestate[k] = v
-        self.publish("gamestate.changed")
+        print(f"o-> Saving {store_name} to file")
 
     async def onDisconnect(self):
         for store_name in self.to_save:

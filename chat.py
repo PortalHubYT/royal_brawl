@@ -25,7 +25,7 @@ class Chat(ApplicationSession):
         super().call(*args)
 
     async def onJoin(self, details):
-        self.stream_id = "uJcDAS7DdHw"
+        self.stream_id = "kjo4i_gsmBI"
         self.stream_url = f"https://www.youtube.com/watch?v={self.stream_id}"
 
         def chat_query():
@@ -55,11 +55,11 @@ class Chat(ApplicationSession):
 
 
 if __name__ == "__main__":
-    while True:
-        try:
-            runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
-            runner.run(Chat)
-        except Exception as e:
-            print(e)
-            print("Retrying in 3 seconds...")
-            asyncio.sleep(3)
+    # while True:
+    #     try:
+    runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+    runner.run(Chat)
+        # except Exception as e:
+        #     print(e)
+        #     print("Retrying in 3 seconds...")
+        #     asyncio.sleep(3)

@@ -1,0 +1,7 @@
+pytchat
+txaio
+mcstatus
+docker
+mctools
+pillow
+autobahn
