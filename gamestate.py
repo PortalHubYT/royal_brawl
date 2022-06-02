@@ -8,6 +8,7 @@ import os
 import pickle
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 import json
+from components.input import multi_split
 
 
 class GameState(ApplicationSession):
@@ -26,7 +27,7 @@ class GameState(ApplicationSession):
                 setattr(self, store_name, ret)
             except Exception or json.decoder.JSONDecodeError as e:
                 if isinstance(e, json.decoder.JSONDecodeError):
-                    print(f"o-> The file {store_name} is empty")
+                    print(f"o---> The file {store_name} is empty")
                 else:
                     print(f"o-> Probably the files don't exist yet")
 
@@ -34,7 +35,7 @@ class GameState(ApplicationSession):
             channel_id = player_info[0]
             mob_uid = player_info[1]
 
-            print(f"o-> Returning: Spawned {mob_uid}")
+            print(f"o-> Spawned [{mob_uid}]")
             self.alives[mob_uid] = channel_id
 
             if channel_id not in self.coins:
@@ -45,18 +46,19 @@ class GameState(ApplicationSession):
 
         async def remove_alive(mob_uid: str) -> dict:
 
-            print(f"o-> Returning: Killing {mob_uid}")
+            print(f"o-> Killing [{mob_uid}]")
 
             display_name = await get_display_name(mob_uid)
 
-            msg = f"{display_name} has died and received 10 coins ({self.coins[self.alives[mob_uid]]}"
-            self.call("minecraft.post", f'title funyrom actionbar "{msg}"')
+            if display_name:
+                msg = f"{display_name} died +10 coins ({self.coins[self.alives[mob_uid]]})"
+                self.call("minecraft.post", f'title funyrom actionbar "{msg}"')
 
-            if mob_uid in self.alives:
+            if mob_uid in self.alives or display_name is None:
                 self.alives.pop(mob_uid)
-                print(f"o-> Returning: Killed {mob_uid}")
+                print(f"o-> Killed [{mob_uid}]")
             else:
-                print(f"o-> Returning: {mob_uid} is not alive")
+                print(f"o-> [{mob_uid}] is not alive")
 
             self.call("minecraft.post", f"kill @e[tag={mob_uid}]")
             return self.alives
@@ -66,9 +68,7 @@ class GameState(ApplicationSession):
 
         def set_coin(channel_id: str, coin: int) -> int:
             self.coins[channel_id] = coin
-            print(
-                f"o-> Returning: ({channel_id[:8]}) coin set to {self.coins[channel_id]}"
-            )
+            print(f"o-> ({channel_id[:8]}) coin set to {self.coins[channel_id]}")
             return self.coins[channel_id]
 
         def get_coin(channel_id: str) -> bool:
@@ -77,9 +77,7 @@ class GameState(ApplicationSession):
         def add_coin(channel_id: str, coin: int) -> int:
 
             self.coins[channel_id] += coin
-            print(
-                f"o-> Returning: ({channel_id[:8]}) coin set to {self.coins[channel_id]}"
-            )
+            print(f"o-> ({channel_id[:8]}) coin set to {self.coins[channel_id]}")
             return self.coins[channel_id]
 
         def remove_coin(channel_id: str, coin: int) -> int:
@@ -91,35 +89,52 @@ class GameState(ApplicationSession):
 
         async def check_alive():
 
-            to_kill = []
             self.game_tick += 1
 
             copy_of = self.alives.copy()
             for id in copy_of:
-                cmd = f"execute if entity @e[tag={id},tag=mob]"
+                cmd = f"data get entity @e[tag={id},tag=mob, limit=1]"
                 result = await self.call("minecraft.post", cmd)
-                if "Test failed" in result:
+
+                if "No entity was found" in result:
+                    await self.call("gamestate.death", self.alives[id])
+                    await remove_alive(id)
+                    return
+
+                result = multi_split(result, [("Pos: [", ">"), ("]", "<")])
+                result = result.split(",")
+
+                y = int(float(result[1][:-1]))
+                if y < 85:
                     await self.call("gamestate.death", self.alives[id])
                     await remove_alive(id)
 
             if self.game_tick % 5 == 0:
-                print(f"o-({len(copy_of)})-> Currently alives: {[x for x in copy_of]}")
+
+                print(
+                    f"o-({self.game_tick})-({len(copy_of)})-> Currently alives: {[x for x in copy_of]}"
+                )
                 display = []
                 for alive in copy_of:
                     display.append({copy_of[alive][:8]: self.coins[copy_of[alive]]})
-                print(f"o-({len(display)})-> Currently coins: {display}")
-                print(f"o-> To remove from alives: {to_kill}")
+                print(
+                    f"o-({self.game_tick})-({len(display)})-> Currently coins: {display}"
+                )
+                print("o---------------------------------------------------o")
 
         async def get_display_name(mob_uid: str) -> str:
             cmd = f"data get entity @e[tag={mob_uid},tag=name_holder,limit=1]"
             ret = await self.call("minecraft.post", cmd)
-            display_name = ret.split("CustomName: '")[1].split("',")[0]
-            print(display_name)
-            if "extra" in display_name:
-                display_name = display_name.split("],")[1]
-            print(display_name)
-            display_name = dict(display_name)
-            return display_name
+
+            if "No entity was found" in ret:
+                return None
+
+            name = multi_split(ret, [["CustomName: ", ">"], ["',", "<"]])
+            if "extra" in name:
+                name = multi_split(name, [["],", ">"]])
+
+            name = multi_split(name, [[':"', ">"], ['"}', "<"]])
+            return name
 
         await self.register(get_display_name, "gamestate.get_display_name")
         await self.subscribe(add_alive, "shop.spawn")  # (channel_id, mob_uid)
@@ -135,15 +150,17 @@ class GameState(ApplicationSession):
 
         async def send_default_cmds(self):
             default_cmds = [
-                f"gamerule mobGriefing false",
-                f"region flag -w world __global__ tnt deny",
+                f"execute in brawl run gamerule mobGriefing false",
+                f"region flag -w brawl __global__ tnt deny",
                 f"whitelist on",
-                f"time set noon",
-                f"gamerule sendCommandFeedback false",
+                f"execute in brawl run time set noon",
+                f"execute in brawl run gamerule sendCommandFeedback false",
                 f'title @e[type=player] title "Restarting..."',
                 f'title @e[type=player] subtitle "Type anything to join the game"',
-                f"gamerule doDaylightCycle false",
-                f"gamerule doWeatherCycle false"
+                f"execute in brawl run gamerule doDaylightCycle false",
+                f"execute in brawl run gamerule doWeatherCycle false",
+                f"execute in brawl run weather clear",
+                f"execute as PortalHub tp 0"
                 # f'bossbar add minecraft:peglin "default"',
                 # f'bossbar set minecraft:peglin name "High score: {0}"',
                 # f"bossbar set minecraft:peglin visible true",
@@ -165,7 +182,7 @@ class GameState(ApplicationSession):
         if not os.path.exists(filepath):
             open(filepath, "w+").close()
 
-        print(f"o-> Ensuring {store_name} file exists")
+        print(f"o--> Ensuring {store_name} file exists")
 
     def load_from_file(self, dir, store_name):
 

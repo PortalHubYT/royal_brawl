@@ -12,13 +12,13 @@ class Component(ApplicationSession):
         async def on_spawn(channel_id: str) -> int:
             """Returns the number of coins of the player"""
             coins = await self.call("gamestate.coin.add", channel_id, 10)
-            print(f"o-> Added 10 coins to {channel_id} on spawn")
+            print(f"o-> Added 10 coins to {channel_id[:8]} on spawn")
             return coins
 
         async def on_death(channel_id: str):
             """Returns the number of coins of the player"""
             coins = await self.call("gamestate.coin.add", channel_id, 10)
-            print(f"o-> Added 10 coins to {channel_id} on death")
+            print(f"o-> Added 10 coins to {channel_id[:8]} on death")
             return coins
 
         async def update_name():
@@ -26,7 +26,8 @@ class Component(ApplicationSession):
 
             for mob_uid in alives:
                 display_name = await self.call("gamestate.get_display_name", mob_uid)
-
+                if display_name is None:
+                    continue
                 coins = await self.call("gamestate.coin.get", alives[mob_uid])
                 nbt = mc.NBT(
                     {
@@ -40,10 +41,11 @@ class Component(ApplicationSession):
                 cmd = (
                     f"data merge entity @e[tag={mob_uid},tag=name_holder,limit=1] {nbt}"
                 )
-                ret = await self.call("minecraft.post", cmd)
-                print(cmd)
+                await self.call("minecraft.post", cmd)
+                print(f"o-> Updated name of {mob_uid}")
 
         await self.subscribe(update_name, "game.tick")
+        await self.subscribe(update_name, "shop.spawn")
         await self.register(on_spawn, "gamestate.alive.add")
         await self.register(on_death, "gamestate.death")
 

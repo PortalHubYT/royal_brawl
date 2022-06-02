@@ -11,26 +11,35 @@ from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner
 
 
 class Scheduler(ApplicationSession):
-
-    wait_time = 1
-
     async def onJoin(self, details):
 
+        self.game_tick = 2
+        self.stars_number = 60
+        self.increment = 0.5
         i = 0
         while True:
             start = time()
 
-            print(str("*" * (i % 10)).ljust(10), end="")
-            self.publish("game.tick")
+            print(
+                "["
+                + str("*" * (floor(i % self.stars_number))).ljust(self.stars_number),
+                end="",
+            )
 
-            """self.call(
-                "minecraft.post",
-                f"bossbar set minecraft:peglin value {int((i % 1000) / 10)}",
-            )"""
+            if i % self.game_tick == 0:
+                self.publish("game.tick")
 
-            i += 1
-            await asyncio.sleep(self.wait_time)
-            print(f"[Last {floor(time() - start)}s, expected {floor(self.wait_time)}s]")
+                """self.call(
+                    "minecraft.post",
+                    f"bossbar set minecraft:peglin value {int((i % 1000) / 10)}",
+                )"""
+            if i % 0.5 == 0:
+                self.publish("game.half_sec")
+
+            i += self.increment
+            i = floor(i * 100) / 100
+            await asyncio.sleep(self.increment)
+            print("] " + str(self.stars_number) + "seconds")
 
 
 # txaio.use_asyncio()

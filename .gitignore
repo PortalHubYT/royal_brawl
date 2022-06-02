@@ -1,0 +1,7 @@
+__pycache__/*.pyc
+__pycache__/gamestate.cpython-38.pyc
+db/alives.json
+.gitignore
+components/__pycache__/input.cpython-38.pyc
+.gitignore
+__pycache__/gamestate.cpython-38.pyc

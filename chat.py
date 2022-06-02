@@ -12,7 +12,7 @@ import pickle
 import json
 from time import time
 from math import floor
-from input import sanitize_very_strict
+from components.input import sanitize_very_strict
 
 
 class Chat(ApplicationSession):
@@ -46,7 +46,7 @@ class Chat(ApplicationSession):
         #     video_id=self.stream_url, interruptable=False, hold_exception=False
         # )
         chat = pytchat.create(
-            video_id=self.stream_url, interruptable=True, hold_exception=False
+            video_id=self.stream_url, interruptable=False, hold_exception=True
         )
         try:
             chat_query()
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     #     try:
     runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
     runner.run(Chat)
-        # except Exception as e:
-        #     print(e)
-        #     print("Retrying in 3 seconds...")
-        #     asyncio.sleep(3)
+    # except Exception as e:
+    #     print(e)
+    #     print("Retrying in 3 seconds...")
+    #     asyncio.sleep(3)
