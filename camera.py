@@ -18,7 +18,8 @@ class Component(ApplicationSession):
         self.origin_angle = 180
         self.pitch = 35
 
-        self.speed = 0.000001
+        self.speed = 0.0000000000001
+        self.camera = ""
         self.camera = "funyrom"
 
         default_cmd = [
@@ -28,7 +29,7 @@ class Component(ApplicationSession):
             # Sets the command block that make the stand spin on itself
             f'execute in brawl run setblock 1 98 0 minecraft:repeating_command_block[conditional=false,facing=up]{{auto:1b,powered:0b,LastExecution:140445L,SuccessCount:1,UpdateLastExecution:1b,conditionMet:1b,CustomName:\'{{"text":"@"}}\',Command:"execute as @e[tag=stand] at @s run tp @s ~ ~ ~ ~{self.speed} ~",TrackOutput:0b}} destroy',
             # Sets the command block that makes the camera spin around the stand
-            f'execute in brawl run setblock 1 99 0 minecraft:repeating_command_block[conditional=false,facing=up]{{auto:1b,powered:0b,LastExecution:140693L,SuccessCount:1,UpdateLastExecution:1b,conditionMet:1b,CustomName:\'{{"text":"@"}}\',Command:"execute in brawl as {self.camera} at @e[tag=stand] run tp {self.camera} ^1 ^15 ^25 ~180 ~30",TrackOutput:0b}} destroy',
+            f'execute in brawl run setblock 1 99 0 minecraft:repeating_command_block[conditional=false,facing=up]{{auto:1b,powered:0b,LastExecution:140693L,SuccessCount:1,UpdateLastExecution:1b,conditionMet:1b,CustomName:\'{{"text":"@"}}\',Command:"execute in brawl as {self.camera} at @e[tag=stand] run tp {self.camera} ^1 ^20 ^35 ~180 ~38",TrackOutput:0b}} destroy',
         ]
 
         for cmd in default_cmd:

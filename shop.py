@@ -30,14 +30,12 @@ class ShopItem:
         self.name_nbt = mc.NBT(
             {
                 "Tags": ["shop", f"shop{self.index}"],
-                "Particle": "block air",
                 "CustomNameVisible": 1,
-                "Duration": 2400000,
+                "Invisible": 1,
                 "CustomName": '{ "text": "' + f"[{self.price}]{self.name}" + '"}',
             }
         )
-        cmd = f"execute at funyrom run summon area_effect_cloud {self.coords} {self.name_nbt}"
-        print(cmd)
+        cmd = f"execute at funyrom run summon armor_stand {self.coords} {self.name_nbt}"
         ret = await self.call("minecraft.post", cmd)
 
         self.item_nbt = mc.NBT(
@@ -45,7 +43,7 @@ class ShopItem:
                 "Marker": 1,
                 "Invisible": 1,
                 "Marker": 1,
-                #  'NoGravity':1,
+                #  'NoGravty':1,
                 "Passengers": [
                     {
                         "id": "Item",
@@ -61,7 +59,7 @@ class ShopItem:
 
     async def refresh(self):
         cmd = f"execute at funyrom run tp @e[tag=shop{self.index}] {self.coords}"
-        await self.call("minecraft.post", cmd)
+        # await self.call("minecraft.post", cmd)
 
 
 class Component(ApplicationSession):
@@ -207,7 +205,7 @@ WIDTH = 14
 
 def get_random_pos():
     x = random.randrange(-WIDTH, WIDTH)
-    y = 130
+    y = 120
     z = random.randrange(-WIDTH, WIDTH)
     return f"{x} {y} {z}"
 

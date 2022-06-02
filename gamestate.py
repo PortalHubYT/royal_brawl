@@ -16,6 +16,7 @@ class GameState(ApplicationSession):
 
         self.coins = {}
         self.alives = {}
+        self.names = {}
         self.game_tick = 0
         self.to_save = ["alives", "coins"]
 
@@ -41,6 +42,7 @@ class GameState(ApplicationSession):
             if channel_id not in self.coins:
                 self.coins[channel_id] = 0
 
+            self.names[channel_id] = get_display_name(mob_uid)
             await self.call("gamestate.alive.add", channel_id)
             return self.alives
 
@@ -49,7 +51,7 @@ class GameState(ApplicationSession):
             print(f"o-> Killing [{mob_uid}]")
 
             display_name = await get_display_name(mob_uid)
-
+            print("here: ", display_name)
             if display_name:
                 msg = f"{display_name} died +10 coins ({self.coins[self.alives[mob_uid]]})"
                 self.call("minecraft.post", f'title funyrom actionbar "{msg}"')
@@ -89,8 +91,7 @@ class GameState(ApplicationSession):
 
         async def check_alive():
 
-            self.game_tick += 1
-
+            self.game_tick += 2
             copy_of = self.alives.copy()
             for id in copy_of:
                 cmd = f"data get entity @e[tag={id},tag=mob, limit=1]"
@@ -109,23 +110,20 @@ class GameState(ApplicationSession):
                     await self.call("gamestate.death", self.alives[id])
                     await remove_alive(id)
 
-            if self.game_tick % 5 == 0:
-
-                print(
-                    f"o-({self.game_tick})-({len(copy_of)})-> Currently alives: {[x for x in copy_of]}"
-                )
-                display = []
-                for alive in copy_of:
-                    display.append({copy_of[alive][:8]: self.coins[copy_of[alive]]})
-                print(
-                    f"o-({self.game_tick})-({len(display)})-> Currently coins: {display}"
-                )
-                print("o---------------------------------------------------o")
+            print(
+                f"o-({self.game_tick})-({len(copy_of)})-> Currently alives: {[x for x in copy_of]}"
+            )
+            display = []
+            for alive in copy_of:
+                display.append({copy_of[alive][:8]: self.coins[copy_of[alive]]})
+            print(f"o-({self.game_tick})-({len(display)})-> Currently coins: {display}")
+            print("o---------------------------------------------------o")
 
         async def get_display_name(mob_uid: str) -> str:
             cmd = f"data get entity @e[tag={mob_uid},tag=name_holder,limit=1]"
             ret = await self.call("minecraft.post", cmd)
 
+            print("now: ", ret)
             if "No entity was found" in ret:
                 return None
 
@@ -160,7 +158,6 @@ class GameState(ApplicationSession):
                 f"execute in brawl run gamerule doDaylightCycle false",
                 f"execute in brawl run gamerule doWeatherCycle false",
                 f"execute in brawl run weather clear",
-                f"execute as PortalHub tp 0"
                 # f'bossbar add minecraft:peglin "default"',
                 # f'bossbar set minecraft:peglin name "High score: {0}"',
                 # f"bossbar set minecraft:peglin visible true",

@@ -37,7 +37,6 @@ class Scheduler(ApplicationSession):
                 self.publish("game.half_sec")
 
             i += self.increment
-            i = floor(i * 100) / 100
             await asyncio.sleep(self.increment)
             print("] " + str(self.stars_number) + "seconds")
 
